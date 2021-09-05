@@ -21,7 +21,7 @@ class Music(commands.Cog):
             if "group-title" in lines[i]:
                 pos = lines[i].find("group-title=")
                 info = lines[i][pos+12:].strip().split(",")
-                country = info[0].strip().replace('"','')
+                country = info[0].replace('"','').split("(")[0].strip()
                 station_name = info[1].strip()
                 link = lines[i+1].strip()
                 if country not in stations:
@@ -45,17 +45,36 @@ class Music(commands.Cog):
       
         player.play(FFmpegPCMAudio(url))
 
+    def is_connected(self, ctx):
+        voice_client = discord.utils.get(ctx.bot.voice_clients, guild=ctx.guild)
+        return voice_client and voice_client.is_connected()
+
     @commands.command()
-    async def randomStation(self, ctx: commands.Context):
+    async def showCountries(self, ctx):
+        """Show available countries in stations list"""
+        countries = sorted(self.stations.keys())
+        report = "Available Countries with stations: \n"
+        for country in countries:
+            report += country + " : " + str(len(self.stations[country])) + "\n"
+        await ctx.send(report)
+
+
+    @commands.command()
+    async def randomStation(self, ctx: commands.Context, country:str=None):
         """Listen to a random radio station."""
-        country = random.choice(list(self.stations.keys()))
-        station = random.choice(self.stations[country])
-        answer = discord.Embed(title="Random Station",
-                                       description=f"""`Station` : **{station[0]}**\n`Country` : **{country}**\n`Link` : **{station[1]}**""",
-                                       colour=0xff0000)
-        await ctx.message.channel.send(embed=answer)
-        channel = ctx.message.author.voice.channel
-        await self.playMe(ctx, channel, station[1])
+        if not country:
+            country = random.choice(list(self.stations.keys()))
+
+        if country not in list(self.stations.keys()):
+            await ctx.send("Error, country not in my stations list.")
+        else:
+            station = random.choice(self.stations[country])
+            answer = discord.Embed(title="Random Station",
+                                           description=f"""`Station` : **{station[0]}**\n`Country` : **{country}**\n`Link` : **{station[1]}**""",
+                                           colour=0xff0000)
+            await ctx.message.channel.send(embed=answer)
+            channel = ctx.message.author.voice.channel
+            await self.playMe(ctx, channel, station[1])
         
 
     #create a player that plays a internet radio stream
@@ -69,10 +88,6 @@ class Music(commands.Cog):
         await ctx.message.channel.send(embed=answer)
         await self.playMe(ctx, channel, url)
 
-    def is_connected(self, ctx):
-        voice_client = discord.utils.get(ctx.bot.voice_clients, guild=ctx.guild)
-        return voice_client and voice_client.is_connected()
-
     @commands.command()
     async def stop(self, ctx):
         """Stop the music player."""
@@ -80,6 +95,7 @@ class Music(commands.Cog):
 
     @commands.command()
     async def leave(self, ctx):
+        """Tell the bot to leave the voice channel"""
         if ctx.author.voice.channel and ctx.author.voice.channel == ctx.voice_client.channel:
             await ctx.voice_client.disconnect()
         else:
