@@ -1,9 +1,6 @@
 from discord.ext import commands
 from discord import Message
 from discord import FFmpegPCMAudio
-#from stations_adapter import get_stations as new_get_stations
-#from stations_adapter import db_connect
-#from stations_adapter import *
 import random
 import discord
 import time, sqlite3
