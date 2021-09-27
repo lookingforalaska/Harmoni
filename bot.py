@@ -8,7 +8,7 @@ import discord
 description = '''Simple Bot to stream internet Radio.'''
 intents = discord.Intents.default()
 intents.members = True
-extensions = ['cogs.music']
+extensions = [ 'cogs.music']
 bot = commands.Bot(command_prefix='?', description=description, intents=intents)
 for extension in extensions:
 	bot.load_extension(extension)

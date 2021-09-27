@@ -1,36 +1,63 @@
 from discord.ext import commands
 from discord import Message
 from discord import FFmpegPCMAudio
+#from stations_adapter import get_stations as new_get_stations
+#from stations_adapter import db_connect
+#from stations_adapter import *
 import random
 import discord
-import time 
-
+import time, sqlite3
 
 class Music(commands.Cog):
-
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.stations = self.get_stations()
+        self._conn = self.db_connect(".\stations\internet_radio_database.db")
+        self.available_locations = self.get_available_stations_locations()
 
-    def get_stations(self):
-        ifile = open(".\src\\radio-garden.txt","r",encoding="utf8")
-        lines = ifile.readlines()
-        stations = {}
+    def db_connect(self, dbName):
+        conn = None
+        try:
+            conn = sqlite3.connect(dbName)
+            
+        except sqlite3.Error as e:
+            print("Uh Oh!: ", e)
+        return conn 
 
-        for i in range(2,len(lines)):
-            if "group-title" in lines[i]:
-                pos = lines[i].find("group-title=")
-                info = lines[i][pos+12:].strip().split(",")
-                country = info[0].replace('"','').split("(")[0].strip()
-                station_name = info[1].strip()
-                link = lines[i+1].strip()
-                if country not in stations:
-                    stations[country] = [(station_name, link)]
-                else:
-                    stations[country].append((station_name,link))
-        ifile.close()
+
+    def get_available_stations_locations(self):
+        
+        stations_per_location = """SELECT places.locationID, places.title, places.country, 
+                                   COUNT(stations.locationID) as number_of_stations FROM places LEFT JOIN stations on
+                                   (places.locationID = stations.locationID) GROUP BY places.locationID HAVING number_of_stations > 0 ORDER BY number_of_stations;
+        """
+        c = self._conn.cursor()
+        c.execute(stations_per_location)
+        places = c.fetchall()
+        print(places)
+        return places
+
+    def get_stations(self, locationID):
+        query = f"""SELECT stations.stationID, stations.title, stations.url, places.title as city, places.country FROM stations 
+                     LEFT JOIN places ON (stations.locationID = places.locationID) WHERE stations.locationID='{locationID}'; """
+    
+        c = self._conn.cursor()
+        stations = c.execute(query).fetchall()
         return stations
 
+    @commands.command()
+    async def randoStation(self, ctx):
+        print(random.choice(self.available_locations)[0])
+        locationID = random.choice(self.available_locations)[0]
+        stations = self.get_stations(locationID)
+        station = random.choice(stations)
+        answer = discord.Embed(title="Random Station",
+                                            description=f"""`Station` : **{station[1]}**\n `City` : **{station[3]}**\n `Country` : **{station[4]}**\n`Link` : **{station[2]}**""",
+                                            colour=0xff0000)
+        
+        await ctx.message.channel.send(embed=answer)
+        channel = ctx.message.author.voice.channel
+        await self.playMe(ctx, channel, station[2])
+       
     async def playMe(self, ctx, channel, url):
         global player
 
@@ -48,34 +75,6 @@ class Music(commands.Cog):
     def is_connected(self, ctx):
         voice_client = discord.utils.get(ctx.bot.voice_clients, guild=ctx.guild)
         return voice_client and voice_client.is_connected()
-
-    @commands.command()
-    async def showCountries(self, ctx):
-        """Show available countries in stations list"""
-        countries = sorted(self.stations.keys())
-        report = "Available Countries with stations: \n"
-        for country in countries:
-            report += country + " : " + str(len(self.stations[country])) + "\n"
-        await ctx.send(report)
-
-
-    @commands.command()
-    async def randomStation(self, ctx: commands.Context, country:str=None):
-        """Listen to a random radio station."""
-        if not country:
-            country = random.choice(list(self.stations.keys()))
-
-        if country not in list(self.stations.keys()):
-            await ctx.send("Error, country not in my stations list.")
-        else:
-            station = random.choice(self.stations[country])
-            answer = discord.Embed(title="Random Station",
-                                           description=f"""`Station` : **{station[0]}**\n`Country` : **{country}**\n`Link` : **{station[1]}**""",
-                                           colour=0xff0000)
-            await ctx.message.channel.send(embed=answer)
-            channel = ctx.message.author.voice.channel
-            await self.playMe(ctx, channel, station[1])
-        
 
     #create a player that plays a internet radio stream
     @commands.command()
